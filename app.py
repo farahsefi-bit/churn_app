@@ -29,7 +29,9 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box}
 html,body,[data-testid="stAppViewContainer"],[data-testid="stApp"]{background-color:#090d13!important;color:#c8d6e8!important;font-family:'Syne',sans-serif!important}
-[data-testid="stSidebar"]{background:#0d1420!important;border-right:1px solid #1a2540!important;padding-top:0!important}
+[data-testid="stSidebar"]{background:#0d1420!important;border-right:1px solid #1a2540!important;padding-top:0!important;min-width:260px!important;width:260px!important}
+section[data-testid="stSidebar"][aria-expanded="false"]{min-width:260px!important;width:260px!important;transform:none!important;display:block!important}
+[data-testid="collapsedControl"]{display:none!important}
 [data-testid="stSidebar"]::before{content:'';display:block;height:3px;background:linear-gradient(90deg,#00e5ff,#7c3aed,#00e5ff);background-size:200% 100%;animation:shimmer 3s linear infinite}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px #00c853}50%{opacity:.6;box-shadow:0 0 4px #00c853}}
