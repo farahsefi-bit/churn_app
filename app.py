@@ -324,12 +324,19 @@ if "Single" in page:
             x=vals, y=names, orientation='h',
             marker=dict(color=vals, colorscale=[[0,'#1a2d4a'],[0.5,'#7c3aed'],[1,'#00e5ff']], line=dict(width=0)),
         ))
-        fig2.update_layout(height=280, margin=dict(t=10,b=10,l=160,r=20),
-            xaxis_title="Weighted Contribution", yaxis=dict(tickfont=dict(family='DM Mono',size=11,color='#c8d6e8')),
-            **PLOT_BG)
-        st.plotly_chart(fig2, use_container_width=True)
+        layout_args = {
+    "height": 280,
+    "margin": dict(t=10, b=10, l=160, r=20),
+    "xaxis_title": "Weighted Contribution",
+    "yaxis": dict(tickfont=dict(family='DM Mono', size=11, color='#c8d6e8'))
+}
 
+# On applique d'abord les paramètres standards
+fig2.update_layout(**layout_args)
 
+# On applique le fond (PLOT_BG) séparément pour éviter les erreurs de déballage
+if 'PLOT_BG' in globals() and isinstance(PLOT_BG, dict):
+    fig2.update_layout(PLOT_BG)
 # ════════════════════════════════════════════════════════════
 # PAGE 2 — BATCH PREDICTION
 # ════════════════════════════════════════════════════════════
@@ -429,10 +436,17 @@ elif "Insights" in page:
         textfont=dict(family='DM Mono', size=10, color='#4a6080'),
         textposition='outside',
     ))
-    fig.update_layout(height=500, margin=dict(t=10,b=40,l=160,r=80),
-        xaxis_title="Importance Score",
-        yaxis=dict(tickfont=dict(family='DM Mono', size=11, color='#c8d6e8')),
-        **PLOT_BG)
+# --- CORRECTION LIGNE 432 ---
+fig.update_layout(
+    height=500, 
+    margin=dict(t=10, b=40, l=160, r=80),
+    xaxis_title="Importance Score",
+    yaxis=dict(tickfont=dict(family='DM Mono', size=11, color='#c8d6e8'))
+)
+
+# Application sécurisée du style de fond
+if 'PLOT_BG' in globals() and isinstance(PLOT_BG, dict):
+    fig.update_layout(PLOT_BG)
     st.plotly_chart(fig, use_container_width=True)
 
     col1, col2 = st.columns(2)
@@ -515,21 +529,27 @@ elif "Segments" in page:
     # Scatter plot
     st.markdown('<div class="section-header"><div class="section-label">Segment Distribution · Risk vs Engagement</div><div class="section-line"></div></div>', unsafe_allow_html=True)
 
-    engagement = np.random.beta(3, 3, n) * 100
     engagement = np.where(seg_labels=="Champions",  np.random.uniform(60,100,n),
                  np.where(seg_labels=="At Risk",     np.random.uniform(30,65,n),
                  np.where(seg_labels=="Hibernating", np.random.uniform(10,40,n),
                                                      np.random.uniform(5,30,n))))
+    
     df_seg = pd.DataFrame({"Churn_Risk": sim_probas*100, "Engagement": engagement, "Segment": seg_labels})
 
     fig = px.scatter(df_seg, x="Engagement", y="Churn_Risk", color="Segment",
         color_discrete_map=seg_colors, opacity=0.7, size_max=6,
         labels={"Churn_Risk": "Churn Risk (%)", "Engagement": "Engagement Score"})
+    
     fig.update_traces(marker=dict(size=5, line=dict(width=0)))
-    fig.update_layout(height=400, margin=dict(t=10,b=40,l=40,r=20), **PLOT_BG)
+    fig.update_layout(height=400, margin=dict(t=10,b=40,l=40,r=20))
+    
+    # Application sécurisée du layout de fond
+    if 'PLOT_BG' in globals():
+        fig.update_layout(PLOT_BG)
+    
     st.plotly_chart(fig, use_container_width=True)
 
-    # Segment volume bar
+    # Segment volume bar & Risk Distribution
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="section-header"><div class="section-label">Segment Volume</div><div class="section-line"></div></div>', unsafe_allow_html=True)
@@ -539,8 +559,11 @@ elif "Segments" in page:
             x=seg_counts["Segment"], y=seg_counts["Count"],
             marker=dict(color=[seg_colors[s] for s in seg_counts["Segment"]], line=dict(width=0)),
         ))
-        fig2.update_layout(height=260, margin=dict(t=10,b=40,l=40,r=20),
-            yaxis_title="Customers", **PLOT_BG)
+        fig2.update_layout(height=260, margin=dict(t=10,b=40,l=40,r=20), yaxis_title="Customers")
+        
+        if 'PLOT_BG' in globals():
+            fig2.update_layout(PLOT_BG)
+            
         st.plotly_chart(fig2, use_container_width=True)
 
     with col2:
@@ -548,10 +571,30 @@ elif "Segments" in page:
         fig3 = go.Figure()
         for seg, color in seg_colors.items():
             vals = df_seg[df_seg["Segment"]==seg]["Churn_Risk"]
-            fig3.add_trace(go.Box(y=vals, name=seg, marker_color=color, line_color=color,
-                fillcolor=color+"22", boxmean=True))
-        fig3.update_layout(height=260, margin=dict(t=10,b=40,l=40,r=20),
-            yaxis_title="Churn Risk (%)", showlegend=False, **PLOT_BG)
+            
+            # Correction de la couleur (ValueError fix)
+            # On s'assure que la couleur est bien concaténée proprement
+            fill_color = f"{color}22" 
+            
+            fig3.add_trace(go.Box(
+                y=vals, 
+                name=seg, 
+                marker_color=color, 
+                line_color=color,
+                fillcolor=fill_color, 
+                boxmean=True
+            ))
+            
+        fig3.update_layout(
+            height=260, 
+            margin=dict(t=10,b=40,l=40,r=20),
+            yaxis_title="Churn Risk (%)", 
+            showlegend=False
+        )
+        
+        if 'PLOT_BG' in globals():
+            fig3.update_layout(PLOT_BG)
+            
         st.plotly_chart(fig3, use_container_width=True)
 
 
