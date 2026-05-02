@@ -59,9 +59,33 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
 .status-text { font-family:'DM Mono',monospace;font-size:10px;color:#2e7d32;letter-spacing:1px; }
 
 [data-testid="stSidebar"] .stRadio > div { gap:4px !important; padding:0 12px; }
-[data-testid="stSidebar"] .stRadio label { background:transparent !important;border:1px solid transparent !important;border-radius:8px !important;padding:10px 14px !important;color:#4a6080 !important;font-size:13px !important;font-weight:600 !important;letter-spacing:.5px !important;cursor:pointer !important;transition:all .2s ease !important;display:flex !important;align-items:center !important; }
-[data-testid="stSidebar"] .stRadio label:hover { background:#131e30 !important;color:#c8d6e8 !important;border-color:#1e3050 !important; }
-[data-testid="stSidebar"] .stRadio [data-baseweb="radio"] { display:none !important; }
+[data-testid="stSidebar"] .stRadio label {
+    background:transparent !important;
+    border:1px solid transparent !important;
+    border-radius:8px !important;
+    padding:10px 14px !important;
+    color:#4a6080 !important;
+    font-size:13px !important;
+    font-weight:600 !important;
+    letter-spacing:.5px !important;
+    cursor:pointer !important;
+    transition:all .2s ease !important;
+    display:flex !important;
+    align-items:center !important;
+}
+[data-testid="stSidebar"] .stRadio label:hover {
+    background:#131e30 !important;
+    color:#c8d6e8 !important;
+    border-color:#1e3050 !important;
+}
+[data-testid="stSidebar"] .stRadio label:has(input:checked) {
+    background:#0f2040 !important;
+    color:#00e5ff !important;
+    border-color:#00e5ff33 !important;
+}
+[data-testid="stSidebar"] .stRadio [data-baseweb="radio"] > div:first-child {
+    display:none !important;
+}
 
 .page-header { padding:32px 0 24px;border-bottom:1px solid #1a2540;margin-bottom:32px;animation:fadeIn .4s ease; }
 .page-tag { font-family:'DM Mono',monospace;font-size:11px;color:#00e5ff;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px; }
