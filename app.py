@@ -459,20 +459,38 @@ elif page == "Batch Prediction":
         except Exception as e:
             st.error(f"Une erreur est survenue lors de l'analyse : {e}")
 # ════════════════════════════════════════════════════════════
-# PAGE 3 — MODEL INSIGHTS
+# ════════════════════════════════════════════════════════════
+# PAGE 3 — MODEL INSIGHTS (SPÉCIFIQUE AU CSV CHARGÉ)
 # ════════════════════════════════════════════════════════════
 elif page == "Model Insights":
     st.markdown("""
     <div class="page-header">
         <div class="page-tag">// MODEL · EXPLAINABILITY</div>
         <h1 class="page-title">Model <span>Intelligence</span></h1>
-        <p class="page-desc">Feature importance · Cumulative curve · Hyperparameters</p>
+        <p class="page-desc">Feature importance · Data Specific Insights · Hyperparameters</p>
     </div>""", unsafe_allow_html=True)
 
+    # Vérification si un fichier CSV a été traité
+    has_data = 'df_out' in st.session_state
+    
+    if has_data:
+        df_active = st.session_state.df_out
+        n_records = len(df_active)
+        churn_p = (df_active['Prediction'] == 1).mean() * 100
+        
+        st.markdown(f"""
+        <div style="background: rgba(0, 229, 255, 0.05); border: 1px solid #00e5ff; padding: 15px; border-radius: 10px; margin-bottom: 25px;">
+            <strong style="color: #00e5ff;">Analysis Context:</strong> Ces insights sont basés sur le fichier CSV chargé 
+            contenant <b>{n_records:,} clients</b> avec un taux de churn prédit de <b>{churn_p:.1f}%</b>.
+        </div>""", unsafe_allow_html=True)
+    else:
+        st.info("💡 Note : Chargez un fichier dans 'Batch Prediction' pour voir les statistiques spécifiques à vos données.")
+
+    # 1. FEATURE IMPORTANCE (Statique par rapport au modèle, mais visuel corrigé)
     importances = model.feature_importances_
     fi_df = pd.DataFrame({"Feature": feature_names, "Importance": importances}).sort_values("Importance", ascending=True)
 
-    section("Top 15 Features by Predictive Power")
+    section("Top 15 Predictive Drivers")
     top15 = fi_df.tail(15)
     fig = go.Figure(go.Bar(
         x=list(top15["Importance"]),
@@ -484,43 +502,56 @@ elif page == "Model Insights":
             line=dict(width=0)
         ),
         text=[f"{v:.4f}" for v in top15["Importance"]],
-        textfont=dict(family='DM Mono', size=10, color='#4a6080'),
+        textfont=dict(family='DM Mono', size=10, color='#c8d6e8'),
         textposition='outside',
     ))
-    fig.update_layout(**plot_layout(
-        height=500,
+    fig.update_layout(plot_layout(
+        height=450,
         margin=dict(t=10,b=40,l=160,r=80),
-        xaxis=dict(title="Importance Score", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
+        xaxis=dict(title="Global Impact Score", gridcolor='#1a2d4a'),
         yaxis=dict(tickfont=dict(family='DM Mono', size=11, color='#c8d6e8')),
     ))
     st.plotly_chart(fig, use_container_width=True)
 
     c1, c2 = st.columns(2)
+    
     with c1:
-        section("Cumulative Importance")
-        fi_sorted = fi_df.sort_values("Importance", ascending=False).reset_index(drop=True)
-        fi_sorted["Cumulative"] = fi_sorted["Importance"].cumsum()
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(
-            x=list(range(1, len(fi_sorted)+1)), y=list(fi_sorted["Cumulative"]),
-            fill='tozeroy', fillcolor='rgba(0,229,255,0.07)',
-            line=dict(color='#00e5ff', width=2), mode='lines',
-        ))
-        fig2.add_hline(y=0.8, line_dash="dot", line_color="#ffab40", line_width=1,
-            annotation_text="80% threshold", annotation_font_color="#ffab40", annotation_font_size=10)
-        fig2.update_layout(**plot_layout(
-            height=280,
-            margin=dict(t=10,b=40,l=40,r=20),
-            xaxis=dict(title="Nb Features", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-            yaxis=dict(title="Cumulative Importance", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
+        # 2. DISTRIBUTION DES PROBABILITÉS DU CSV (S'il existe)
+        section("Score Distribution (Last CSV)")
+        if has_data:
+            fig2 = px.violin(st.session_state.df_out, y="Churn_Probability", box=True, points="all",
+                             color_discrete_sequence=['#00e5ff'])
+            fig2.update_layout(plot_layout(height=300, margin=dict(t=10,b=10,l=10,r=10)))
+            fig2.update_layout(yaxis=dict(gridcolor='#1a2d4a', title="Probability"))
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.write("En attente de données...")
 
     with c2:
-        section("Model Hyperparameters")
-        params    = model.get_params()
-        params_df = pd.DataFrame({"Parameter": list(params.keys()), "Value": [str(v) for v in params.values()]})
-        st.dataframe(params_df, use_container_width=True, height=280)
+        # 3. HYPERPARAMÈTRES RÉELS
+        section("Model Architecture")
+        params = model.get_params()
+        # On ne garde que les paramètres clés pour plus de lisibilité
+        key_params = ['n_estimators', 'max_depth', 'min_samples_split', 'criterion', 'random_state']
+        filtered_params = {k: params[k] for k in key_params if k in params}
+        
+        st.markdown('<div style="background:#090d13; padding:10px; border-radius:5px; border:1px solid #1a2d4a;">', unsafe_allow_html=True)
+        for k, v in filtered_params.items():
+            st.markdown(f"**{k}**: `{v}`")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if hasattr(model, "oob_score_"):
+            st.metric("OOB Score (Validation)", f"{model.oob_score_:.4f}")
+
+    # 4. EXPLICATION DES VARIABLES TOP (Adapté à vos données télécom)
+    if has_data:
+        section("Key Variable Analysis")
+        # Exemple : Analyse automatique de la variable la plus importante
+        top_var = fi_df.iloc[-1]["Feature"]
+        avg_val = st.session_state.df_out[top_var].mean() if top_var in st.session_state.df_out else 0
+        
+        st.write(f"La variable **{top_var}** est le levier n°1 de prédiction.")
+        st.write(f"Moyenne sur le fichier chargé : `{avg_val:.2f}`")
 
 
 # ════════════════════════════════════════════════════════════
