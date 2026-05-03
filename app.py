@@ -608,6 +608,9 @@ elif page == "Customer Segments":
 # ════════════════════════════════════════════════════════════
 # PAGE 5 — ALERTS & ACTIONS
 # ════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+# PAGE 5 — ALERTS & ACTIONS (DYNAMIQUE)
+# ════════════════════════════════════════════════════════════
 elif page == "Alerts & Actions":
     st.markdown("""
     <div class="page-header">
@@ -616,24 +619,43 @@ elif page == "Alerts & Actions":
         <p class="page-desc">Critical churn signals · Intervention queue · Retention playbooks</p>
     </div>""", unsafe_allow_html=True)
 
-    random.seed(7)
-    np.random.seed(7)
-    names = [
-        "Amira Bensalem","Karim Trabelsi","Sonia Gharbi","Mohamed Ayari","Leila Kchouk",
-        "Rami Zouari","Nadia Hamdi","Youssef Ben Ali","Fatma Mejri","Chaker Mansouri",
-        "Ines Khalfallah","Bilel Cherif",
-    ]
-    alerts = []
-    for name in names:
-        score = random.uniform(0.55, 0.99)
-        level = "critical" if score > 0.82 else "high" if score > 0.68 else "medium"
-        alerts.append({
-            "name": name, "score": score, "level": level,
-            "segment": random.choice(["At Risk","Hibernating","Lost"]),
-            "days": random.randint(2,30), "value": random.randint(800,12000),
-        })
+    # 1. RÉCUPÉRATION DES DONNÉES DU BATCH (S'IL EXISTE)
+    # On suppose que vous avez stocké 'df_out' dans st.session_state lors du Batch Prediction
+    if 'df_out' not in st.session_state:
+        st.warning("⚠️ Aucune donnée disponible. Veuillez d'abord traiter un fichier dans 'Batch Prediction'.")
+        # Données de secours vides pour éviter le crash
+        alerts = []
+    else:
+        df_final = st.session_state.df_out
+        
+        # On prépare les alertes à partir du vrai fichier CSV
+        alerts = []
+        for idx, row in df_final.iterrows():
+            # On cherche un nom de colonne pour l'identité (ex: 'State' ou 'ID' ou index)
+            # Si vous n'avez pas de colonne "Name", on utilise l'index ou une colonne existante
+            customer_name = f"Customer {idx}"
+            if 'State' in row: customer_name = f"User_{row['State']}_{idx}"
+            
+            score = row['Churn_Probability']
+            
+            # On ne garde que les risques significatifs (> 50%)
+            if score > 0.5:
+                level = "critical" if score > 0.80 else "high" if score > 0.65 else "medium"
+                
+                # Simulation de données complémentaires car elles ne sont pas tjs dans le CSV
+                alerts.append({
+                    "name": customer_name,
+                    "score": score,
+                    "level": level,
+                    "segment": "At Risk" if score < 0.8 else "Lost",
+                    "days": random.randint(1, 15), # Simulation activité
+                    "value": int(row.get('Total day minutes', 0) * 10) # Valeur estimée par l'usage
+                })
+
+    # Tri par score décroissant
     alerts.sort(key=lambda x: x["score"], reverse=True)
 
+    # 2. CALCUL DES KPI RÉELS
     crit = sum(1 for a in alerts if a["level"]=="critical")
     high = sum(1 for a in alerts if a["level"]=="high")
     med  = sum(1 for a in alerts if a["level"]=="medium")
@@ -647,58 +669,65 @@ elif page == "Alerts & Actions":
         <div class="kpi-card"><div class="kpi-label">Revenue at Risk</div><div class="kpi-value danger">{rev:,} TND</div></div>
     </div>""", unsafe_allow_html=True)
 
+    # 3. FILTRAGE
     col_f1, _ = st.columns([1, 3])
     with col_f1:
         filter_level = st.selectbox("Filter by level", ["All","Critical","High","Medium"])
+    
     filtered = alerts if filter_level=="All" else [a for a in alerts if a["level"]==filter_level.lower()]
 
+    # 4. AFFICHAGE DES CARTES D'INTERVENTION
     section("Intervention Queue")
     actions_map = {
         "critical": ["Retention call","Promo offer","Executive escalation"],
         "high":     ["Email campaign","Discount voucher","Check-in call"],
         "medium":   ["Newsletter","Product tip","Survey"],
     }
-    for a in filtered:
-        initials     = "".join([w[0].upper() for w in a["name"].split()])
-        actions_html = "".join([f'<span class="action-pill">▸ {act}</span>' for act in actions_map[a["level"]]])
-        st.markdown(f"""
-        <div class="alert-card {a['level']}">
-            <div class="alert-avatar">{initials}</div>
-            <div class="alert-info">
-                <div class="alert-name">{a['name']}</div>
-                <div class="alert-meta">{a['segment']} · Last active {a['days']}d ago · {a['value']:,} TND</div>
-                <div style="margin-top:6px;">{actions_html}</div>
-            </div>
-            <div class="alert-score">
-                <div class="alert-score-val {a['level']}">{a['score']*100:.1f}%</div>
-                <div class="alert-score-label">CHURN RISK</div>
-            </div>
-        </div>""", unsafe_allow_html=True)
 
+    if not filtered:
+        st.info("No alerts found for this level.")
+    else:
+        for a in filtered:
+            # Génération d'initiales propres
+            parts = a["name"].split('_') if '_' in a["name"] else a["name"].split()
+            initials = "".join([w[0].upper() for w in parts[:2]])
+            
+            actions_html = "".join([f'<span class="action-pill">▸ {act}</span>' for act in actions_map[a["level"]]])
+            
+            st.markdown(f"""
+            <div class="alert-card {a['level']}">
+                <div class="alert-avatar">{initials}</div>
+                <div class="alert-info">
+                    <div class="alert-name">{a['name']}</div>
+                    <div class="alert-meta">{a['segment']} · Last active {a['days']}d ago · {a['value']:,} TND</div>
+                    <div style="margin-top:6px;">{actions_html}</div>
+                </div>
+                <div class="alert-score">
+                    <div class="alert-score-val {a['level']}">{a['score']*100:.1f}%</div>
+                    <div class="alert-score-label">CHURN RISK</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+    # 5. TIMELINE (ACTIVITÉ PLATEFORME)
     section("Recent Platform Activity")
     now = datetime.now()
+    # On rend la timeline un peu plus dynamique par rapport au dernier batch
+    last_batch_time = "Just now" if 'df_out' in st.session_state else "No activity"
+    
     events = [
-        (now-timedelta(minutes=3),  "cyan",   "Batch scoring completed",    "1,200 records · 23.4% churn rate",        "BATCH"),
-        (now-timedelta(minutes=18), "red",    "Critical alert triggered",   "Amira Bensalem — score 94.2%",            "ALERT"),
-        (now-timedelta(hours=1),    "purple", "Model retrained",            "Accuracy improved to 95.1% (+0.4%)",      "MODEL"),
-        (now-timedelta(hours=2),    "green",  "Retention action executed",  "Karim Trabelsi — promo email sent",       "ACTION"),
-        (now-timedelta(hours=5),    "cyan",   "New data ingested",          "3,400 customer events loaded",            "DATA"),
-        (now-timedelta(hours=12),   "red",    "Churn spike detected",       "Segment 'Hibernating' +8% vs last week",  "ALERT"),
-        (now-timedelta(days=1),     "green",  "Retention campaign success", "12 customers retained · 48,000 TND saved","SUCCESS"),
+        (now-timedelta(minutes=2),  "cyan",   "Batch scoring updated",    f"{len(alerts)} risks detected from latest CSV", "BATCH"),
+        (now-timedelta(hours=1),    "purple", "Model sync",               "Random Forest Engine v2.4.1",                 "MODEL"),
     ]
-    tag_colors = {"BATCH":"#00e5ff","ALERT":"#ff5252","MODEL":"#7c3aed","ACTION":"#69f0ae","DATA":"#00e5ff","SUCCESS":"#69f0ae"}
+    
+    tag_colors = {"BATCH":"#00e5ff","ALERT":"#ff5252","MODEL":"#7c3aed","ACTION":"#69f0ae","SUCCESS":"#69f0ae"}
 
-    st.markdown('<div style="position:relative;padding-left:20px;">', unsafe_allow_html=True)
     for ts, dot, title, detail, tag in events:
-        diff  = now - ts
-        label = f"{diff.seconds//60}m ago" if diff.seconds < 3600 else (f"{diff.seconds//3600}h ago" if diff.days < 1 else f"{diff.days}d ago")
-        tc    = tag_colors.get(tag, "#00e5ff")
+        tc = tag_colors.get(tag, "#00e5ff")
         r,g,b = int(tc[1:3],16),int(tc[3:5],16),int(tc[5:7],16)
         st.markdown(f"""
         <div class="tl-item">
             <div class="tl-dot {dot}"></div>
-            <div class="tl-time">{label} · {ts.strftime('%H:%M')}</div>
+            <div class="tl-time">{ts.strftime('%H:%M')}</div>
             <div class="tl-text"><strong style="color:#c8d6e8;">{title}</strong><br>{detail}</div>
             <span class="tl-tag" style="background:rgba({r},{g},{b},0.13);color:{tc};border:1px solid rgba({r},{g},{b},0.27);">{tag}</span>
         </div>""", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
