@@ -555,7 +555,8 @@ elif page == "Model Insights":
 
 
 # ════════════════════════════════════════════════════════════
-# PAGE 4 — CUSTOMER SEGMENTS
+# ════════════════════════════════════════════════════════════
+# PAGE 4 — CUSTOMER SEGMENTS (DYNAMIQUE VIA CSV)
 # ════════════════════════════════════════════════════════════
 elif page == "Customer Segments":
     st.markdown("""
@@ -565,103 +566,110 @@ elif page == "Customer Segments":
         <p class="page-desc">Risk-based clustering · Behavioral profiles · Retention targeting</p>
     </div>""", unsafe_allow_html=True)
 
-    np.random.seed(42)
-    n = 1200
-    seg_labels = np.random.choice(["Champions","At Risk","Hibernating","Lost"], size=n, p=[0.35,0.25,0.25,0.15])
-    sim_probas = np.where(seg_labels=="Champions",  np.random.beta(2,8,n),
-                 np.where(seg_labels=="At Risk",     np.random.beta(6,4,n),
-                 np.where(seg_labels=="Hibernating", np.random.beta(4,4,n),
-                                                     np.random.beta(8,2,n))))
-    seg_colors = {"Champions":"#00e5ff","At Risk":"#ffab40","Hibernating":"#7c3aed","Lost":"#ff5252"}
-    seg_descs  = {
-        "Champions":   "High-value, highly engaged. Very low churn probability.",
-        "At Risk":     "Previously active. Showing declining engagement signals.",
-        "Hibernating": "Low recent activity. Need re-engagement campaigns.",
-        "Lost":        "High churn probability. Last-chance intervention required.",
-    }
+    if 'df_out' not in st.session_state:
+        st.warning("⚠️ Aucune donnée disponible. Veuillez d'abord traiter un fichier dans 'Batch Prediction'.")
+    else:
+        df_active = st.session_state.df_out.copy()
 
-    c1, c2 = st.columns(2)
-    for i, (seg, color) in enumerate(seg_colors.items()):
-        count = int((seg_labels == seg).sum())
-        avg_p = float(sim_probas[seg_labels == seg].mean()) * 100
-        card  = f"""
-        <div class="seg-card">
-            <div style="position:absolute;top:0;left:0;right:0;height:2px;background:{color};"></div>
-            <div style="font-family:'DM Mono',monospace;font-size:10px;color:{color};letter-spacing:2px;text-transform:uppercase;">SEGMENT</div>
-            <div class="seg-name">{seg}</div>
-            <div class="seg-desc">{seg_descs[seg]}</div>
-            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
-                <div>
-                    <div style="font-family:'DM Mono',monospace;font-size:10px;color:#3a4f6e;letter-spacing:1px;margin-bottom:4px;">CUSTOMERS</div>
-                    <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:#c8d6e8;">{count:,}</div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-family:'DM Mono',monospace;font-size:10px;color:#3a4f6e;letter-spacing:1px;margin-bottom:4px;">AVG CHURN RISK</div>
-                    <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:{color};">{avg_p:.1f}%</div>
-                </div>
-            </div>
-        </div>"""
-        if i % 2 == 0:
-            c1.markdown(card, unsafe_allow_html=True)
+        # 1. SEGMENTATION RÉELLE BASÉE SUR LE SCORE DU MODÈLE
+        # On définit les segments selon les probabilités prédites
+        def assign_segment(prob):
+            if prob < 0.3: return "Champions"
+            elif prob < 0.6: return "Hibernating"
+            elif prob < 0.8: return "At Risk"
+            else: return "Lost"
+
+        df_active['Segment'] = df_active['Churn_Probability'].apply(assign_segment)
+        
+        # On simule un score d'engagement basé sur l'usage (ex: Total day minutes) 
+        # pour le scatter plot, normalisé de 0 à 100
+        if 'Total day minutes' in df_active.columns:
+            max_min = df_active['Total day minutes'].max()
+            df_active['Engagement'] = (df_active['Total day minutes'] / max_min) * 100
         else:
-            c2.markdown(card, unsafe_allow_html=True)
+            df_active['Engagement'] = (1 - df_active['Churn_Probability']) * 100
 
-    section("Risk vs Engagement · Scatter")
-    engagement = np.where(seg_labels=="Champions",  np.random.uniform(60,100,n),
-                 np.where(seg_labels=="At Risk",     np.random.uniform(30,65,n),
-                 np.where(seg_labels=="Hibernating", np.random.uniform(10,40,n),
-                                                     np.random.uniform(5,30,n))))
-    df_seg = pd.DataFrame({"Churn_Risk": sim_probas*100, "Engagement": engagement, "Segment": seg_labels})
-    fig = px.scatter(df_seg, x="Engagement", y="Churn_Risk", color="Segment",
-        color_discrete_map=seg_colors, opacity=0.7,
-        labels={"Churn_Risk":"Churn Risk (%)","Engagement":"Engagement Score"})
-    fig.update_traces(marker=dict(size=5, line=dict(width=0)))
-    fig.update_layout(**plot_layout(
-        height=380,
-        margin=dict(t=10,b=40,l=40,r=20),
-        xaxis=dict(title="Engagement Score", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-        yaxis=dict(title="Churn Risk (%)", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-    ))
-    st.plotly_chart(fig, use_container_width=True)
+        seg_colors = {"Champions":"#00e5ff","At Risk":"#ffab40","Hibernating":"#7c3aed","Lost":"#ff5252"}
+        seg_descs  = {
+            "Champions":   "High-value, very low churn probability. Maintain loyalty.",
+            "Hibernating": "Low activity or engagement. Needs re-activation.",
+            "At Risk":     "High probability of leaving. Immediate action required.",
+            "Lost":        "Critical churn score. Last-chance intervention.",
+        }
 
-    c1, c2 = st.columns(2)
-    with c1:
-        section("Volume par Segment")
-        sc = df_seg["Segment"].value_counts().reset_index()
-        sc.columns = ["Segment","Count"]
-        fig2 = go.Figure(go.Bar(
-            x=list(sc["Segment"]),
-            y=list(sc["Count"]),
-            marker=dict(color=[seg_colors[s] for s in sc["Segment"]], line=dict(width=0)),
+        # 2. AFFICHAGE DES CARTES DE SEGMENTS
+        c1, c2 = st.columns(2)
+        segments_list = ["Champions", "Hibernating", "At Risk", "Lost"]
+        
+        for i, seg in enumerate(segments_list):
+            color = seg_colors[seg]
+            seg_data = df_active[df_active["Segment"] == seg]
+            count = len(seg_data)
+            avg_p = seg_data['Churn_Probability'].mean() * 100 if count > 0 else 0
+            
+            card = f"""
+            <div class="seg-card">
+                <div style="position:absolute;top:0;left:0;right:0;height:2px;background:{color};"></div>
+                <div style="font-family:'DM Mono',monospace;font-size:10px;color:{color};letter-spacing:2px;text-transform:uppercase;">SEGMENT</div>
+                <div class="seg-name">{seg}</div>
+                <div class="seg-desc">{seg_descs[seg]}</div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+                    <div>
+                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#3a4f6e;letter-spacing:1px;margin-bottom:4px;">CUSTOMERS</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:#c8d6e8;">{count:,}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#3a4f6e;letter-spacing:1px;margin-bottom:4px;">AVG RISK</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:{color};">{avg_p:.1f}%</div>
+                    </div>
+                </div>
+            </div>"""
+            if i % 2 == 0: c1.markdown(card, unsafe_allow_html=True)
+            else: c2.markdown(card, unsafe_allow_html=True)
+
+        # 3. SCATTER PLOT : RISK VS ENGAGEMENT
+        section("Risk vs Engagement · Real Distribution")
+        fig = px.scatter(df_active, x="Engagement", y="Churn_Probability", color="Segment",
+            color_discrete_map=seg_colors, opacity=0.7,
+            hover_data=['Churn_Probability'],
+            labels={"Churn_Probability":"Churn Risk (%)","Engagement":"Usage Engagement Index"})
+        
+        fig.update_traces(marker=dict(size=6, line=dict(width=0)))
+        fig.update_layout(plot_layout(
+            height=400,
+            xaxis=dict(title="Usage Score (Engagement)", gridcolor='#1a2d4a'),
+            yaxis=dict(title="Churn Probability", gridcolor='#1a2d4a'),
         ))
-        fig2.update_layout(**plot_layout(
-            height=250,
-            margin=dict(t=10,b=40,l=40,r=20),
-            xaxis=dict(gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-            yaxis=dict(title="Customers", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-    with c2:
-        section("Risk Distribution per Segment")
-        fig3 = go.Figure()
-        for seg, color in seg_colors.items():
-            vals = list(df_seg[df_seg["Segment"]==seg]["Churn_Risk"])
-            fig3.add_trace(go.Box(
-                y=vals, name=seg,
-                marker_color=color,
-                line_color=color,
-                fillcolor=f'rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.13)',
-                boxmean=True
+        # 4. BAR CHART & BOX PLOT
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            section("Volume par Segment")
+            sc = df_active["Segment"].value_counts().reindex(segments_list).reset_index()
+            sc.columns = ["Segment","Count"]
+            fig2 = go.Figure(go.Bar(
+                x=list(sc["Segment"]),
+                y=list(sc["Count"]),
+                marker=dict(color=[seg_colors[s] for s in sc["Segment"]], line=dict(width=0)),
             ))
-        fig3.update_layout(**plot_layout(
-            height=250,
-            margin=dict(t=10,b=40,l=40,r=20),
-            xaxis=dict(gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-            yaxis=dict(title="Churn Risk (%)", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-            showlegend=False,
-        ))
-        st.plotly_chart(fig3, use_container_width=True)
+            fig2.update_layout(plot_layout(height=250))
+            st.plotly_chart(fig2, use_container_width=True)
+
+        with col_b2:
+            section("Risk Spread per Segment")
+            fig3 = go.Figure()
+            for seg in segments_list:
+                vals = df_active[df_active["Segment"]==seg]["Churn_Probability"] * 100
+                if not vals.empty:
+                    fig3.add_trace(go.Box(
+                        y=vals, name=seg,
+                        marker_color=seg_colors[seg],
+                        line_color=seg_colors[seg],
+                        fillcolor=f'rgba({int(seg_colors[seg][1:3],16)},{int(seg_colors[seg][3:5],16)},{int(seg_colors[seg][5:7],16)},0.13)',
+                    ))
+            fig3.update_layout(plot_layout(height=250, showlegend=False))
+            st.plotly_chart(fig3, use_container_width=True)
 
 
 # ════════════════════════════════════════════════════════════
