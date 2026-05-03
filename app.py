@@ -350,6 +350,9 @@ if page == "Single Prediction":
 # ════════════════════════════════════════════════════════════
 # PAGE 2 — BATCH PREDICTION
 # ════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+# PAGE 2 — BATCH PREDICTION
+# ════════════════════════════════════════════════════════════
 elif page == "Batch Prediction":
     st.markdown("""
     <div class="page-header">
@@ -361,28 +364,40 @@ elif page == "Batch Prediction":
     uploaded = st.file_uploader("Upload raw CSV (original format — Churn column optional)", type=["csv"])
 
     if uploaded:
-        df_raw   = pd.read_csv(uploaded)
+        df_raw = pd.read_csv(uploaded)
         section("Raw Data Preview")
         st.dataframe(df_raw.head(5), use_container_width=True)
 
         try:
+            # 1. Feature Engineering
             df_eng = engineer_features(df_raw)
+            
+            # 2. Alignement des colonnes avec le modèle
             missing_cols = set(feature_names) - set(df_eng.columns)
             for c in missing_cols:
                 df_eng[c] = 0
             df_input = df_eng[feature_names]
 
+            # 3. Prédictions
             probas = model.predict_proba(df_input)[:, 1]
             preds  = model.predict(df_input)
 
+            # 4. Construction du DataFrame de sortie
             df_out = df_raw.copy()
             if 'Churn' in df_out.columns:
                 df_out = df_out.drop(columns=['Churn'])
+            
             df_out["Churn_Probability"] = probas.round(4)
             df_out["Prediction"]        = preds
             df_out["Risk_Label"]        = pd.Series(preds).map({0:"Stay", 1:"Churn"}).values
+            
+            # --- CRUCIAL : Sauvegarde pour les autres pages ---
+            st.session_state.df_out = df_out 
+            # --------------------------------------------------
+
             churn_rate = preds.mean() * 100
 
+            # 5. Affichage des KPIs
             st.markdown(f"""
             <div class="kpi-grid">
                 <div class="kpi-card"><div class="kpi-label">Total Customers</div><div class="kpi-value">{len(df_out):,}</div></div>
@@ -392,44 +407,57 @@ elif page == "Batch Prediction":
                 </div>
             </div>""", unsafe_allow_html=True)
 
+            # 6. Graphique : Distribution des probabilités
             section("Probability Distribution")
             fig = px.histogram(df_out, x="Churn_Probability", color="Risk_Label", nbins=40,
                 color_discrete_map={"Stay":"#00e5ff","Churn":"#ff5252"}, opacity=0.9)
+            
             fig.update_traces(marker_line_width=0)
-            fig.update_layout(**plot_layout(
+            
+            # Correction syntaxe Plotly (sans les **)
+            fig.update_layout(plot_layout(
                 height=300,
                 margin=dict(t=10,b=40,l=40,r=20),
                 bargap=0.05,
                 xaxis=dict(title="Churn Probability", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
-                yaxis=dict(title="Count", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e')),
+                yaxis=dict(title="Count", gridcolor='#1a2d4a', linecolor='#1a2d4a', tickfont=dict(color='#3a4f6e'))
             ))
             st.plotly_chart(fig, use_container_width=True)
 
+            # 7. Détails et Export
             c1, c2 = st.columns(2)
             with c1:
                 section("Risk Breakdown")
                 low    = int((probas < 0.4).sum())
                 medium = int(((probas >= 0.4) & (probas < 0.7)).sum())
                 high   = int((probas >= 0.7).sum())
+                
                 fig2 = go.Figure(go.Pie(
-                    labels=["Low Risk","Medium Risk","High Risk"], values=[low,medium,high], hole=0.65,
+                    labels=["Low Risk","Medium Risk","High Risk"], 
+                    values=[low,medium,high], 
+                    hole=0.65,
                     marker=dict(colors=["#00e5ff","#ffab40","#ff5252"], line=dict(color='#090d13', width=3)),
                     textfont=dict(family='DM Mono', size=11, color='#c8d6e8'),
                 ))
-                fig2.update_layout(**plot_layout(height=260, margin=dict(t=10,b=10,l=10,r=10)))
+                fig2.update_layout(plot_layout(height=260, margin=dict(t=10,b=10,l=10,r=10)))
                 st.plotly_chart(fig2, use_container_width=True)
+                
             with c2:
-                section("Scored Records")
+                section("Scored Records (Top 20)")
                 st.dataframe(df_out[["Churn_Probability","Risk_Label"]].head(20), use_container_width=True, height=240)
 
+            # Bouton de téléchargement
             csv_out = df_out.to_csv(index=False).encode("utf-8")
-            st.download_button("⬡  Export Predictions · CSV", data=csv_out,
-                file_name="churniq_predictions.csv", mime="text/csv", use_container_width=True)
+            st.download_button(
+                label="⬡  Export Predictions · CSV",
+                data=csv_out,
+                file_name=f"churniq_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
         except Exception as e:
-            st.error(f"Erreur : {e}")
-
-
+            st.error(f"Une erreur est survenue lors de l'analyse : {e}")
 # ════════════════════════════════════════════════════════════
 # PAGE 3 — MODEL INSIGHTS
 # ════════════════════════════════════════════════════════════
