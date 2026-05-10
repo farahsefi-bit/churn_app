@@ -239,7 +239,7 @@ with st.sidebar:
     st.markdown("""
     <div style="padding:0 24px;">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:#1e3050;letter-spacing:1px;line-height:1.8;">
-            ANTHROPIC · POWERED<br>RANDOM FOREST ENGINE<br>© 2025 CHURNIQ INC.
+            ANTHROPIC · POWERED<br>RANDOM FOREST ENGINE<br>© 2026 CHURNIQ INC.
         </div>
     </div>""", unsafe_allow_html=True)
 
